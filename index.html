@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản Lý Diễn Viên và Phim</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+
+        body {
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        header {
+            background: linear-gradient(135deg, #2c3e50, #3498db);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+
+        header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .add-actor, .actor-list {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+        }
+
+        .add-actor h2, .actor-list h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #2c3e50;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        .actor-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .actor-card h3 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+        }
+
+        .add-movie-form {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .add-movie-form input {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .movie-list {
+            margin-top: 1rem;
+        }
+
+        .movie-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .movie-item a {
+            color: #3498db;
+            text-decoration: none;
+        }
+
+        .movie-item a:hover {
+            text-decoration: underline;
+        }
+
+        .movie-item select, .movie-item input[type="number"] {
+            width: 100px;
+            padding: 0.5rem;
+        }
+
+        footer {
+            text-align: center;
+            padding: 1rem;
+            color: #666;
+            margin-top: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .add-movie-form {
+                flex-direction: column;
+            }
+
+            .movie-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Quản Lý Diễn Viên và Phim</h1>
+        <p>Lưu trữ và quản lý danh sách diễn viên cùng các bộ phim của họ</p>
+    </header>
+
+    <div class="container">
+        <div class="add-actor">
+            <h2>Thêm Diễn Viên</h2>
+            <div class="form-group">
+                <label for="actorName">Tên Diễn Viên</label>
+                <input type="text" id="actorName" placeholder="Nhập tên diễn viên">
+            </div>
+            <button onclick="addActor()">Thêm Diễn Viên</button>
+        </div>
+
+        <div class="actor-list">
+            <h2>Danh Sách Diễn Viên</h2>
+            <div id="actors"></div>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2025 Quản Lý Phim. All rights reserved.</p>
+    </footer>
+
+    <script>
+        let actors = JSON.parse(localStorage.getItem('actors')) || [];
+
+        function saveData() {
+            localStorage.setItem('actors', JSON.stringify(actors));
+        }
+
+        function addActor() {
+            const actorName = document.getElementById('actorName').value.trim();
+            if (actorName) {
+                actors.push({ name: actorName, movies: [] });
+                document.getElementById('actorName').value = '';
+                saveData();
+                renderActors();
+            }
+        }
+
+        function addMovie(actorIndex) {
+            const movieName = document.getElementById(`movieName-${actorIndex}`).value.trim();
+            const movieLink = document.getElementById(`movieLink-${actorIndex}`).value.trim();
+            if (movieName && movieLink) {
+                actors[actorIndex].movies.push({
+                    name: movieName,
+                    link: movieLink,
+                    watched: false,
+                    rating: 0
+                });
+                document.getElementById(`movieName-${actorIndex}`).value = '';
+                document.getElementById(`movieLink-${actorIndex}`).value = '';
+                saveData();
+                renderActors();
+            }
+        }
+
+        function updateWatched(actorIndex, movieIndex, value) {
+            actors[actorIndex].movies[movieIndex].watched = value === 'true';
+            saveData();
+            renderActors();
+        }
+
+        function updateRating(actorIndex, movieIndex, value) {
+            const rating = Math.max(0, Math.min(10, parseInt(value) || 0));
+            actors[actorIndex].movies[movieIndex].rating = rating;
+            saveData();
+            renderActors();
+        }
+
+        function deleteActor(actorIndex) {
+            if (confirm('Bạn có chắc muốn xóa diễn viên này?')) {
+                actors.splice(actorIndex, 1);
+                saveData();
+                renderActors();
+            }
+        }
+
+        function deleteMovie(actorIndex, movieIndex) {
+            if (confirm('Bạn có chắc muốn xóa phim này?')) {
+                actors[actorIndex].movies.splice(movieIndex, 1);
+                saveData();
+                renderActors();
+            }
+        }
+
+        function renderActors() {
+            const actorsDiv = document.getElementById('actors');
+            actorsDiv.innerHTML = '';
+
+            actors.forEach((actor, actorIndex) => {
+                const actorCard = document.createElement('div');
+                actorCard.className = 'actor-card';
+                actorCard.innerHTML = `
+                    <h3>${actor.name}</h3>
+                    <button onclick="deleteActor(${actorIndex})" style="background: #e74c3c; float: right;">Xóa</button>
+                    <div class="add-movie-form">
+                        <input type="text" id="movieName-${actorIndex}" placeholder="Tên phim">
+                        <input type="url" id="movieLink-${actorIndex}" placeholder="Link phim">
+                        <button onclick="addMovie(${actorIndex})">Thêm Phim</button>
+                    </div>
+                    <div class="movie-list">
+                        ${actor.movies.map((movie, movieIndex) => `
+                            <div class="movie-item">
+                                <a href="${movie.link}" target="_blank">${movie.name}</a>
+                                <select onchange="updateWatched(${actorIndex}, ${movieIndex}, this.value)">
+                                    <option value="false" ${!movie.watched ? 'selected' : ''}>Chưa xem</option>
+                                    <option value="true" ${movie.watched ? 'selected' : ''}>Đã xem</option>
+                                </select>
+                                <input type="number" min="0" max="10" value="${movie.rating}" 
+                                    onchange="updateRating(${actorIndex}, ${movieIndex}, this.value)"
+                                    placeholder="Điểm (0-10)">
+                                <button onclick="deleteMovie(${actorIndex}, ${movieIndex})" 
+                                    style="background: #e74c3c;">Xóa</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                actorsDiv.appendChild(actorCard);
+            });
+        }
+
+        window.onload = renderActors;
+    </script>
+</body>
+</html>
