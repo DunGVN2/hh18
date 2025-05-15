@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quản Lý Diễn Viên và Phim</title>
+    <!-- Firebase App (phải tải trước Firestore) -->
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js"></script>
+    <!-- Firebase Firestore -->
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js"></script>
     <style>
         * {
             margin: 0;
@@ -38,7 +42,7 @@
             margin-bottom: 0.5rem;
         }
 
-        .add-actor, .actor-list {
+        .add-actor, .actor-list, .movie-section {
             background: white;
             padding: 1.5rem;
             border-radius: 8px;
@@ -46,7 +50,7 @@
             margin-bottom: 1.5rem;
         }
 
-        .add-actor h2, .actor-list h2 {
+        .add-actor h2, .actor-list h2, .movie-section h2 {
             font-size: 1.5rem;
             margin-bottom: 1rem;
             color: #2c3e50;
@@ -62,7 +66,7 @@
             font-weight: 500;
         }
 
-        .form-group input, .form-group select {
+        .form-group input {
             width: 100%;
             padding: 0.75rem;
             border: 1px solid #ddd;
@@ -85,16 +89,27 @@
             background-color: #2980b9;
         }
 
-        .actor-card {
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 1rem;
-            margin-bottom: 1rem;
+        .delete-btn {
+            background-color: #e74c3c;
         }
 
-        .actor-card h3 {
-            color: #2c3e50;
-            margin-bottom: 1rem;
+        .delete-btn:hover {
+            background-color: #c0392b;
+        }
+
+        .actor-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .actor-item:hover {
+            background-color: #f9f9f9;
+        }
+
+        .actor-item:last-child {
+            border-bottom: none;
         }
 
         .add-movie-form {
@@ -130,9 +145,14 @@
             text-decoration: underline;
         }
 
-        .movie-item select, .movie-item input[type="number"] {
-            width: 100px;
-            padding: 0.5rem;
+        .movie-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+        }
+
+        .error {
+            color: #e74c3c;
+            margin-bottom: 1rem;
         }
 
         footer {
@@ -174,112 +194,210 @@
             <h2>Danh Sách Diễn Viên</h2>
             <div id="actors"></div>
         </div>
+
+        <div class="movie-section" id="movieSection" style="display: none;">
+            <h2 id="movieSectionTitle"></h2>
+            <button onclick="hideMovies()">Quay Lại</button>
+            <div class="add-movie-form">
+                <input type="text" id="movieName" placeholder="Tên phim">
+                <input type="url" id="movieLink" placeholder="Link phim">
+                <button onclick="addMovie()">Thêm Phim</button>
+            </div>
+            <div class="movie-list" id="movies"></div>
+        </div>
     </div>
 
     <footer>
-        <p>&copy; 2025 Quản Lý Phim. All rights reserved.</p>
+        <p>© 2025 Quản Lý Phim. All rights reserved.</p>
     </footer>
 
     <script>
-        let actors = JSON.parse(localStorage.getItem('actors')) || [];
+        // Cấu hình Firebase (thay bằng cấu hình từ Firebase Console)
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
 
-        function saveData() {
-            localStorage.setItem('actors', JSON.stringify(actors));
+        // Khởi tạo Firebase
+        let db;
+        try {
+            const app = firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+            console.log("Firebase initialized successfully");
+        } catch (error) {
+            console.error("Firebase initialization failed:", error);
+            document.getElementById('actors').innerHTML = '<p class="error">Lỗi kết nối cơ sở dữ liệu</p>';
         }
 
+        let selectedActorId = null;
+
+        // Lấy danh sách diễn viên
+        function fetchActors() {
+            if (!db) return;
+            db.collection('actors').onSnapshot(
+                snapshot => {
+                    const actors = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    renderActors(actors);
+                },
+                err => {
+                    console.error("Firestore error:", err);
+                    document.getElementById('actors').innerHTML = '<p class="error">Lỗi khi tải danh sách diễn viên</p>';
+                }
+            );
+        }
+
+        // Thêm diễn viên
         function addActor() {
             const actorName = document.getElementById('actorName').value.trim();
-            if (actorName) {
-                actors.push({ name: actorName, movies: [] });
-                document.getElementById('actorName').value = '';
-                saveData();
-                renderActors();
+            if (actorName && db) {
+                db.collection('actors').add({ name: actorName })
+                    .then(() => {
+                        document.getElementById('actorName').value = '';
+                    })
+                    .catch(err => {
+                        console.error("Error adding actor:", err);
+                        document.getElementById('actors').innerHTML = '<p class="error">Lỗi khi thêm diễn viên</p>';
+                    });
             }
         }
 
-        function addMovie(actorIndex) {
-            const movieName = document.getElementById(`movieName-${actorIndex}`).value.trim();
-            const movieLink = document.getElementById(`movieLink-${actorIndex}`).value.trim();
-            if (movieName && movieLink) {
-                actors[actorIndex].movies.push({
+        // Xóa diễn viên
+        function deleteActor(actorId) {
+            if (confirm('Bạn có chắc muốn xóa diễn viên này?') && db) {
+                db.collection('actors').doc(actorId).delete()
+                    .catch(err => {
+                        console.error("Error deleting actor:", err);
+                        document.getElementById('actors').innerHTML = '<p class="error">Lỗi khi xóa diễn viên</p>';
+                    });
+            }
+        }
+
+        // Hiển thị phim của diễn viên
+        function showMovies(actorId, actorName) {
+            selectedActorId = actorId;
+            document.getElementById('movieSectionTitle').textContent = `Phim của ${actorName}`;
+            document.getElementById('movieSection').style.display = 'block';
+            document.getElementById('actorName').value = '';
+            fetchMovies(actorId);
+        }
+
+        // Ẩn danh sách phim
+        function hideMovies() {
+            selectedActorId = null;
+            document.getElementById('movieSection').style.display = 'none';
+            document.getElementById('movies').innerHTML = '';
+            document.getElementById('movieName').value = '';
+            document.getElementById('movieLink').value = '';
+        }
+
+        // Lấy danh sách phim
+        function fetchMovies(actorId) {
+            if (!db) return;
+            db.collection('actors').doc(actorId).collection('movies').onSnapshot(
+                snapshot => {
+                    const movies = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    renderMovies(movies);
+                },
+                err => {
+                    console.error("Firestore error:", err);
+                    document.getElementById('movies').innerHTML = '<p class="error">Lỗi khi tải danh sách phim</p>';
+                }
+            );
+        }
+
+        // Thêm phim
+        function addMovie() {
+            const movieName = document.getElementById('movieName').value.trim();
+            const movieLink = document.getElementById('movieLink').value.trim();
+            if (movieName && movieLink && selectedActorId && db) {
+                db.collection('actors').doc(selectedActorId).collection('movies').add({
                     name: movieName,
                     link: movieLink,
-                    watched: false,
-                    rating: 0
-                });
-                document.getElementById(`movieName-${actorIndex}`).value = '';
-                document.getElementById(`movieLink-${actorIndex}`).value = '';
-                saveData();
-                renderActors();
+                    checked: false
+                })
+                    .then(() => {
+                        document.getElementById('movieName').value = '';
+                        document.getElementById('movieLink').value = '';
+                    })
+                    .catch(err => {
+                        console.error("Error adding movie:", err);
+                        document.getElementById('movies').innerHTML = '<p class="error">Lỗi khi thêm phim</p>';
+                    });
             }
         }
 
-        function updateWatched(actorIndex, movieIndex, value) {
-            actors[actorIndex].movies[movieIndex].watched = value === 'true';
-            saveData();
-            renderActors();
-        }
-
-        function updateRating(actorIndex, movieIndex, value) {
-            const rating = Math.max(0, Math.min(10, parseInt(value) || 0));
-            actors[actorIndex].movies[movieIndex].rating = rating;
-            saveData();
-            renderActors();
-        }
-
-        function deleteActor(actorIndex) {
-            if (confirm('Bạn có chắc muốn xóa diễn viên này?')) {
-                actors.splice(actorIndex, 1);
-                saveData();
-                renderActors();
+        // Xóa phim
+        function deleteMovie(movieId) {
+            if (confirm('Bạn có chắc muốn xóa phim này?') && db) {
+                db.collection('actors').doc(selectedActorId).collection('movies').doc(movieId).delete()
+                    .catch(err => {
+                        console.error("Error deleting movie:", err);
+                        document.getElementById('movies').innerHTML = '<p class="error">Lỗi khi xóa phim</p>';
+                    });
             }
         }
 
-        function deleteMovie(actorIndex, movieIndex) {
-            if (confirm('Bạn có chắc muốn xóa phim này?')) {
-                actors[actorIndex].movies.splice(movieIndex, 1);
-                saveData();
-                renderActors();
+        // Cập nhật trạng thái checkbox
+        function toggleMovieCheck(movieId, checked) {
+            if (db) {
+                db.collection('actors').doc(selectedActorId).collection('movies').doc(movieId).update({
+                    checked: !checked
+                })
+                    .catch(err => {
+                        console.error("Error updating movie:", err);
+                        document.getElementById('movies').innerHTML = '<p class="error">Lỗi khi cập nhật trạng thái</p>';
+                    });
             }
         }
 
-        function renderActors() {
+        // Render danh sách diễn viên
+        function renderActors(actors) {
             const actorsDiv = document.getElementById('actors');
             actorsDiv.innerHTML = '';
-
-            actors.forEach((actor, actorIndex) => {
-                const actorCard = document.createElement('div');
-                actorCard.className = 'actor-card';
-                actorCard.innerHTML = `
-                    <h3>${actor.name}</h3>
-                    <button onclick="deleteActor(${actorIndex})" style="background: #e74c3c; float: right;">Xóa</button>
-                    <div class="add-movie-form">
-                        <input type="text" id="movieName-${actorIndex}" placeholder="Tên phim">
-                        <input type="url" id="movieLink-${actorIndex}" placeholder="Link phim">
-                        <button onclick="addMovie(${actorIndex})">Thêm Phim</button>
-                    </div>
-                    <div class="movie-list">
-                        ${actor.movies.map((movie, movieIndex) => `
-                            <div class="movie-item">
-                                <a href="${movie.link}" target="_blank">${movie.name}</a>
-                                <select onchange="updateWatched(${actorIndex}, ${movieIndex}, this.value)">
-                                    <option value="false" ${!movie.watched ? 'selected' : ''}>Chưa xem</option>
-                                    <option value="true" ${movie.watched ? 'selected' : ''}>Đã xem</option>
-                                </select>
-                                <input type="number" min="0" max="10" value="${movie.rating}" 
-                                    onchange="updateRating(${actorIndex}, ${movieIndex}, this.value)"
-                                    placeholder="Điểm (0-10)">
-                                <button onclick="deleteMovie(${actorIndex}, ${movieIndex})" 
-                                    style="background: #e74c3c;">Xóa</button>
-                            </div>
-                        `).join('')}
-                    </div>
+            actors.forEach(actor => {
+                const actorItem = document.createElement('div');
+                actorItem.className = 'actor-item';
+                actorItem.innerHTML = `
+                    <span onclick="showMovies('${actor.id}', '${actor.name}')" 
+                          style="color: #3498db; text-decoration: none; flex: 1;">
+                        ${actor.name}
+                    </span>
+                    <button class="delete-btn" onclick="deleteActor('${actor.id}')">Xóa</button>
                 `;
-                actorsDiv.appendChild(actorCard);
+                actorsDiv.appendChild(actorItem);
             });
         }
 
-        window.onload = renderActors;
+        // Render danh sách phim
+        function renderMovies(movies) {
+            const moviesDiv = document.getElementById('movies');
+            moviesDiv.innerHTML = '';
+            movies.forEach(movie => {
+                const movieItem = document.createElement('div');
+                movieItem.className = 'movie-item';
+                movieItem.innerHTML = `
+                    <input type="checkbox" ${movie.checked ? 'checked' : ''} 
+                           onchange="toggleMovieCheck('${movie.id}', ${movie.checked})">
+                    <span>${movie.checked ? 'X' : ''}</span>
+                    <a href="${movie.link}" target="_blank" rel="noopener noreferrer">${movie.name}</a>
+                    <button class="delete-btn" onclick="deleteMovie('${movie.id}')">Xóa</button>
+                `;
+                moviesDiv.appendChild(movieItem);
+            });
+        }
+
+        // Khởi động ứng dụng
+        window.onload = fetchActors;
     </script>
 </body>
 </html>
